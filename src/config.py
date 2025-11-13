@@ -6,18 +6,15 @@ from pathlib import Path
 # Ruta relativa al archivo con las respuestas de la encuesta.
 DATA_PATH: Path = Path("data") / "Respuestas_final.xlsx"
 
-# Mapa de columnas para adaptar los nombres reales del archivo Excel a nombres
-# estándar dentro del proyecto. Ajusta los valores del diccionario una vez
-# conozcas los encabezados reales del archivo (puedes obtenerlos ejecutando el
-# script principal, que imprimirá la lista de columnas disponibles).
+# Mapa DEFINITIVO de columnas, usando los encabezados EXACTOS del Excel:
 COLUMN_MAP: dict[str, str] = {
-    "edad": "Edad",
-    "viajes_anio": "Viajes_al_año",
-    "p1_acuerdo": "Pregunta1",
-    "p2_economia": "Pregunta2",
-    "p3_necesidad": "Pregunta3",
+    "edad": "Cuál es tu edad?",
+    "viajes_anio": "Cuántas veces al año visitas el aeropuerto José María Córdova de Rionegro?",
+    "p1_acuerdo": "En una escala de 1 a 10, ¿qué tan de acuerdo estás con la ampliación del aeropuerto José María Córdova?",
+    "p2_economia": "En una escala de 1 a 10, ¿qué tanto crees que la economía del oriente antioqueño puede mejorar con esta obra?",
+    "p3_necesidad": "En una escala de 1 a 10, ¿qué tan necesaria consideras esta obra?",
 }
 
-# Puedes modificar libremente las claves del diccionario si quieres usar otros
-# nombres estándar dentro del código. Lo importante es que los valores
-# correspondan exactamente a los encabezados existentes en el Excel.
+# IMPORTANTE:
+# - Los valores (la parte derecha) deben coincidir EXACTAMENTE con los encabezados del Excel.
+# - Respeta tildes, signos de interrogación, comas y espacios.

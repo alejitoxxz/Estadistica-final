@@ -61,13 +61,21 @@ def preparar_datos(df: pd.DataFrame) -> pd.DataFrame:
         df_trabajo["edad"] >= EDAD_LIMITE_ADULTO + 1,
     ]
     elecciones = ["Joven", "Adulto", "Adulto mayor"]
-    df_trabajo["grupo_edad"] = np.select(condiciones, elecciones, default=np.nan)
 
-    registros_fuera_rango = df_trabajo["grupo_edad"].isna().sum()
+    # Usamos un string como valor por defecto para evitar conflictos de tipo con NumPy
+    df_trabajo["grupo_edad"] = np.select(
+        condiciones,
+        elecciones,
+        default="Sin categoría",
+    )
+
+    # Contar registros fuera del rango esperado (edad < 16 o NaN)
+    registros_fuera_rango = (df_trabajo["grupo_edad"] == "Sin categoría").sum()
     if registros_fuera_rango > 0:
         print(
-            "Advertencia: se encontraron", registros_fuera_rango,
-            "registros con edades fuera del rango definido (16 años en adelante)."
+            "Advertencia: se encontraron",
+            registros_fuera_rango,
+            "registros con edades fuera del rango definido (16 años en adelante).",
         )
 
     # Normalizar nombre de la pregunta principal
