@@ -1,12 +1,50 @@
 """Funciones para ajustar y reportar el diseño factorial (ANOVA 2x3)."""
 from __future__ import annotations
 
+from typing import Dict
+
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
 
 
-def anova_2x3(df: pd.DataFrame):
+def _generar_conclusion(tabla_anova: pd.DataFrame) -> str:
+    """Crea una interpretación breve a partir de la tabla ANOVA."""
+
+    if "PR(>F)" not in tabla_anova.columns:
+        return (
+            "La tabla ANOVA no contiene valores p. Revisa los resultados manualmente "
+            "para interpretar los efectos principales y la interacción."
+        )
+
+    etiquetas = {
+        "C(frecuencia_viaje)": "el efecto principal de la frecuencia de viaje",
+        "C(grupo_edad)": "el efecto principal del grupo etario",
+        "C(frecuencia_viaje):C(grupo_edad)": "la interacción entre frecuencia de viaje y grupo etario",
+    }
+
+    conclusiones = []
+    for fila, descripcion in etiquetas.items():
+        if fila in tabla_anova.index:
+            p_valor = tabla_anova.loc[fila, "PR(>F)"]
+            if p_valor < 0.05:
+                conclusiones.append(
+                    f"Se encontró evidencia de que {descripcion} es significativa (p = {p_valor:.3f})."
+                )
+            else:
+                conclusiones.append(
+                    f"No se encontró evidencia significativa para {descripcion} (p = {p_valor:.3f})."
+                )
+
+    if not conclusiones:
+        return (
+            "La tabla ANOVA no contiene las filas esperadas para evaluar los efectos del diseño factorial."
+        )
+
+    return " ".join(conclusiones)
+
+
+def anova_2x3(df: pd.DataFrame) -> Dict[str, object]:
     """Ajusta un modelo ANOVA 2x3 para 'acuerdo_ampliacion'.
 
     Factores:
@@ -21,8 +59,6 @@ def anova_2x3(df: pd.DataFrame):
         - imprime la tabla ANOVA si es posible
         - si no se puede ajustar, imprime una explicación en español.
     """
-    print("===== ANOVA 2x3 =====")
-
     # Trabajamos sobre una copia para no tocar el DataFrame original
     df_anova = df.copy()
 
@@ -32,7 +68,13 @@ def anova_2x3(df: pd.DataFrame):
             "No se encontraron las columnas 'grupo_edad' y/o 'frecuencia_viaje' en el DataFrame. "
             "No es posible realizar la ANOVA 2x3."
         )
-        return None
+        return {
+            "exito": False,
+            "mensaje": "Faltan columnas necesarias para ejecutar la ANOVA 2x3.",
+            "tabla": None,
+            "tabla_texto": "",
+            "conclusion": "No fue posible estimar el modelo por ausencia de factores clave.",
+        }
 
     df_anova = df_anova[df_anova["grupo_edad"] != "Sin categoría"]
 
@@ -61,7 +103,16 @@ def anova_2x3(df: pd.DataFrame):
             "Puedes mencionarlo en el informe como una LIMITACIÓN del diseño: "
             "no se logró cubrir adecuadamente todos los tratamientos del diseño factorial 2x3."
         )
-        return None
+        return {
+            "exito": False,
+            "mensaje": "Los datos no contienen niveles suficientes para ambos factores.",
+            "tabla": None,
+            "tabla_texto": "",
+            "conclusion": (
+                "No se pudo ajustar el modelo ANOVA porque algún factor quedó representado con "
+                "un único nivel tras el filtrado de datos."
+            ),
+        }
 
     # Si hay suficientes niveles, intentamos ajustar el modelo
     try:
@@ -74,15 +125,16 @@ def anova_2x3(df: pd.DataFrame):
         print("\nTabla ANOVA (tipo II):")
         print(tabla_anova)
 
-        print(
-            "\nInterpretación general sugerida:\n"
-            "- La fila 'C(frecuencia_viaje)' indica si, en promedio, los viajeros frecuentes\n"
-            "  y no frecuentes difieren en su grado de acuerdo con la ampliación.\n"
-            "- La fila 'C(grupo_edad)' indica si los distintos grupos etarios difieren en su media.\n"
-            "- La fila 'C(frecuencia_viaje):C(grupo_edad)' indica si hay interacción entre ambos factores.\n"
-        )
+        conclusion = _generar_conclusion(tabla_anova)
+        print("\n" + conclusion)
 
-        return tabla_anova
+        return {
+            "exito": True,
+            "mensaje": "Modelo ANOVA ajustado correctamente.",
+            "tabla": tabla_anova,
+            "tabla_texto": tabla_anova.to_string(),
+            "conclusion": conclusion,
+        }
     except Exception as e:
         print(
             "No fue posible ajustar el modelo ANOVA 2x3 por un problema numérico o de diseño."
@@ -93,4 +145,13 @@ def anova_2x3(df: pd.DataFrame):
             "la estructura real de los datos (tratamientos vacíos o casi vacíos) "
             "impidió realizar el análisis factorial completo."
         )
-        return None
+        return {
+            "exito": False,
+            "mensaje": "Error numérico al ajustar el modelo ANOVA 2x3.",
+            "tabla": None,
+            "tabla_texto": "",
+            "conclusion": (
+                "Aunque se intentó ajustar el modelo ANOVA 2×3, surgieron problemas numéricos "
+                "que impidieron obtener resultados válidos."
+            ),
+        }
