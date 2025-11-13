@@ -9,7 +9,6 @@ import pandas as pd
 
 def _formatear_numero(valor: Any, decimales: int = 2) -> str:
     """Devuelve ``valor`` formateado con ``decimales`` decimales."""
-
     if isinstance(valor, (int, float)) and not pd.isna(valor):
         formato = f"{{:.{decimales}f}}"
         return formato.format(valor)
@@ -17,12 +16,24 @@ def _formatear_numero(valor: Any, decimales: int = 2) -> str:
 
 
 def _formatear_moda(moda: Any) -> str:
-    if not moda:
+    """Formatea la moda (o lista de modas) para mostrarla en el reporte."""
+    if moda is None:
         return "N/A"
-    return ", ".join(_formatear_numero(valor) for valor in moda)
+    # Si viene como escalar
+    if isinstance(moda, (int, float)):
+        return _formatear_numero(moda)
+    # Si viene como lista / serie
+    try:
+        lista = list(moda)
+    except TypeError:
+        return str(moda)
+    if len(lista) == 0:
+        return "N/A"
+    return ", ".join(_formatear_numero(valor) for valor in lista)
 
 
 def _ruta_a_posix(ruta: Path | None) -> str:
+    """Convierte una ruta a formato POSIX para usar en Markdown."""
     if ruta is None:
         return ""
     return ruta.as_posix()
@@ -48,6 +59,7 @@ def generar_reporte_markdown(
 
     n_muestra = resultados.get("n_muestra", 0)
 
+    # Interpretaciones de intervalos
     interpretacion_media = (
         "Con un {nivel:.0f} % de confianza, el verdadero promedio poblacional de acuerdo con "
         "la ampliación del aeropuerto se encuentra entre {li} y {ls}."
@@ -66,6 +78,7 @@ def generar_reporte_markdown(
         ls=_formatear_numero(ic_prop.get("limite_superior")),
     )
 
+    # Conclusión prueba de hipótesis
     if prueba.get("decision") == "Rechazar H0":
         conclusion_prueba = (
             "Se rechaza la hipótesis nula y se concluye que la media poblacional supera a "
@@ -81,11 +94,13 @@ def generar_reporte_markdown(
     conclusion_anova = anova.get("conclusion", "No se obtuvo un resultado interpretable del ANOVA.")
     mensaje_anova = anova.get("mensaje", "")
 
+    # Rutas de figuras
     ruta_hist = _ruta_a_posix(rutas_figuras.get("hist_acuerdo"))
     ruta_box_frec = _ruta_a_posix(rutas_figuras.get("box_frecuencia"))
     ruta_box_edad = _ruta_a_posix(rutas_figuras.get("box_edad"))
     ruta_barras = _ruta_a_posix(rutas_figuras.get("barras_tratamientos"))
 
+    # Conclusiones generales
     conclusiones_generales = [
         (
             "El grado de acuerdo con la ampliación presenta una media de "
@@ -103,11 +118,18 @@ def generar_reporte_markdown(
         ).format(
             mu0=_formatear_numero(prueba.get("mu0")),
             p_valor=_formatear_numero(prueba.get("p_valor_unilateral"), 4),
-            decision="lo que respalda la afirmación de que la media supera el umbral." if prueba.get("decision") == "Rechazar H0" else "por lo que no se evidencia una media superior al umbral.",
+            decision=(
+                "lo que respalda la afirmación de que la media supera el umbral."
+                if prueba.get("decision") == "Rechazar H0"
+                else "por lo que no se evidencia una media superior al umbral."
+            ),
         ),
         conclusion_anova,
     ]
 
+    # =========================
+    # Construcción del Markdown
+    # =========================
     contenido = f"""# Informe de resultados - Proyecto de Estadística
 
 ## 1. Descripción general de la muestra
@@ -180,16 +202,18 @@ def generar_reporte_markdown(
 
 """
 
+    # Tabla ANOVA como bloque de código Markdown
     if tabla_anova_texto:
-        contenido += f"```
-{tabla_anova_texto}
-```
-"
+        contenido += "```\n"
+        contenido += tabla_anova_texto
+        contenido += "\n```\n\n"
+
     if mensaje_anova:
         contenido += f"{mensaje_anova}\n\n"
 
     contenido += f"Interpretación: {conclusion_anova}\n\n"
 
+    # Gráficas
     contenido += "## 6. Gráficas\n\n"
     if ruta_hist:
         contenido += f"![Histograma del acuerdo]({ruta_hist})\n\n"
@@ -200,10 +224,12 @@ def generar_reporte_markdown(
     if ruta_barras:
         contenido += f"![Medias por tratamiento]({ruta_barras})\n\n"
 
+    # Conclusiones finales
     contenido += "## 7. Conclusiones generales\n\n"
     for conclusion in conclusiones_generales:
         contenido += f"- {conclusion}\n"
 
     contenido += "\n"
 
+    # Escribir archivo
     output_path.write_text(contenido, encoding="utf-8")
