@@ -44,15 +44,32 @@ def preparar_datos(df: pd.DataFrame) -> pd.DataFrame:
     mapa_renombrar = {valor: clave for clave, valor in COLUMN_MAP.items()}
     df_trabajo = df_trabajo.rename(columns=mapa_renombrar)
 
+    # Guardar una copia del valor original de viajes antes de convertir a número
+    if "viajes_anio" in df_trabajo.columns:
+        df_trabajo["viajes_original"] = df_trabajo["viajes_anio"]
+    else:
+        df_trabajo["viajes_original"] = np.nan
+
     # Conversión a valores numéricos donde aplique
     for columna in ("edad", "viajes_anio", "p1_acuerdo", "p2_economia", "p3_necesidad"):
         if columna in df_trabajo.columns:
             df_trabajo[columna] = pd.to_numeric(df_trabajo[columna], errors="coerce")
 
-    # Crear frecuencia de viaje
-    df_trabajo["frecuencia_viaje"] = np.where(
-        df_trabajo["viajes_anio"] >= 6, "Frecuente", "No frecuente"
+    # Crear frecuencia de viaje (robusto: soporta texto o números)
+    # Regla:
+    # - Frecuente si:
+    #   * viajes_anio >= 6 (numérico), o
+    #   * el texto original contiene "Más de 6" o "mas de 6"
+    cond_frecuente_numerico = df_trabajo["viajes_anio"] >= 6
+
+    viajes_texto = df_trabajo["viajes_original"].astype(str).str.lower()
+    cond_frecuente_texto = viajes_texto.str.contains("más de 6") | viajes_texto.str.contains(
+        "mas de 6"
     )
+
+    cond_frecuente = cond_frecuente_numerico | cond_frecuente_texto
+
+    df_trabajo["frecuencia_viaje"] = np.where(cond_frecuente, "Frecuente", "No frecuente")
 
     # Clasificación por grupos de edad
     condiciones = [
@@ -69,7 +86,7 @@ def preparar_datos(df: pd.DataFrame) -> pd.DataFrame:
         default="Sin categoría",
     )
 
-    # Contar registros fuera del rango esperado (edad < 16 o NaN)
+    # Contar registros fuera del rango esperado (edad < 16 o datos raros)
     registros_fuera_rango = (df_trabajo["grupo_edad"] == "Sin categoría").sum()
     if registros_fuera_rango > 0:
         print(
