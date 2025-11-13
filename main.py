@@ -7,14 +7,20 @@ from src.cargar_datos import cargar_excel
 from src.config import DATA_PATH
 from src.descriptivos import resumen_general, resumen_por_grupo
 from src.diseno_factorial import anova_2x3
-from src.graficos import barras_por_tratamiento, boxplots_por_factores, histograma_acuerdo
+from src.graficos import (
+    guardar_barras_por_tratamiento,
+    guardar_boxplots_por_factores,
+    guardar_histograma_acuerdo,
+)
 from src.intervalos_confianza import intervalo_confianza_media, intervalo_confianza_proporcion
 from src.limpiar_preparar import preparar_datos
 from src.prueba_hipotesis import prueba_media_mayor_que_5
+from src.reporte_markdown import generar_reporte_markdown
 
 
 DATA_DIR = Path("data")
 FIGURAS_DIR = Path("figuras")
+REPORTE_PATH = Path("reporte_estadistico.md")
 
 
 def verificar_estructura() -> bool:
@@ -52,6 +58,8 @@ def main() -> None:
         return
 
     FIGURAS_DIR.mkdir(exist_ok=True)
+    for archivo in FIGURAS_DIR.glob("*.png"):
+        archivo.unlink()
 
     print("===== CARGA DE DATOS =====")
     df = cargar_excel()
@@ -64,8 +72,10 @@ def main() -> None:
     print()
 
     print("===== ANÁLISIS DESCRIPTIVO =====")
-    resumen_general(df_preparado)
-    resumen_por_grupo(df_preparado, ["frecuencia_viaje", "grupo_edad", "tratamiento"])
+    descriptivos = resumen_general(df_preparado)
+    resumen_grupos = resumen_por_grupo(
+        df_preparado, ["frecuencia_viaje", "grupo_edad", "tratamiento"]
+    )
 
     print("===== INTERVALO DE CONFIANZA PARA LA MEDIA =====")
     ic_media = intervalo_confianza_media(df_preparado["acuerdo_ampliacion"])
@@ -76,19 +86,39 @@ def main() -> None:
     imprimir_intervalo(ic_prop, "Intervalo de confianza para la proporción de personas a favor:")
 
     print("===== PRUEBA DE HIPÓTESIS μ > 5 =====")
-    prueba_media_mayor_que_5(df_preparado["acuerdo_ampliacion"])
+    resultado_prueba = prueba_media_mayor_que_5(df_preparado["acuerdo_ampliacion"])
     print()
 
     print("===== ANOVA 2x3 =====")
-    anova_2x3(df_preparado)
+    resultado_anova = anova_2x3(df_preparado)
 
     print("===== GRÁFICAS =====")
-    histograma_acuerdo(df_preparado)
-    boxplots_por_factores(df_preparado)
-    barras_por_tratamiento(df_preparado)
+    rutas_figuras: dict[str, Path] = {}
+    rutas_figuras["hist_acuerdo"] = guardar_histograma_acuerdo(df_preparado, FIGURAS_DIR)
+    rutas_box = guardar_boxplots_por_factores(df_preparado, FIGURAS_DIR)
+    rutas_figuras.update(rutas_box)
+    rutas_figuras["barras_tratamientos"] = guardar_barras_por_tratamiento(
+        df_preparado, FIGURAS_DIR
+    )
 
-    print("Análisis completado. Las gráficas se mostraron en pantalla. Puedes guardarlas"
-          " manualmente desde la ventana de visualización si lo deseas.")
+    resultados = {
+        "n_muestra": int(len(df_preparado)),
+        "descriptivos": descriptivos,
+        "resumen_por_grupo": resumen_grupos,
+        "intervalos": {
+            "media": ic_media,
+            "proporcion": ic_prop,
+        },
+        "prueba_hipotesis": resultado_prueba,
+        "anova": resultado_anova,
+    }
+
+    generar_reporte_markdown(resultados, rutas_figuras, REPORTE_PATH)
+
+    print(
+        "Análisis completado. Las gráficas se guardaron en la carpeta 'figuras/' y se "
+        "generó el archivo 'reporte_estadistico.md'."
+    )
 
 
 if __name__ == "__main__":
