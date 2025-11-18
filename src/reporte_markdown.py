@@ -32,6 +32,28 @@ def _formatear_moda(moda: Any) -> str:
     return ", ".join(_formatear_numero(valor) for valor in lista)
 
 
+def _describir_correlacion(valor: float) -> str:
+    """Clasifica la fuerza y sentido de una correlación."""
+
+    if pd.isna(valor):
+        return "no disponible"
+
+    magnitud = abs(valor)
+    if magnitud >= 0.8:
+        intensidad = "muy alta"
+    elif magnitud >= 0.6:
+        intensidad = "alta"
+    elif magnitud >= 0.4:
+        intensidad = "moderada"
+    elif magnitud >= 0.2:
+        intensidad = "baja"
+    else:
+        intensidad = "muy baja"
+
+    sentido = "positiva" if valor >= 0 else "negativa"
+    return f"{intensidad} ({sentido})"
+
+
 def _ruta_a_posix(ruta: Path | None) -> str:
     """Convierte una ruta a formato POSIX para usar en Markdown."""
     if ruta is None:
@@ -56,6 +78,9 @@ def generar_reporte_markdown(
 
     prueba = resultados.get("prueba_hipotesis", {})
     anova = resultados.get("anova", {})
+    normalidad = resultados.get("normalidad", {})
+    normalidad_acuerdo = normalidad.get("acuerdo", {})
+    normalidad_residuos = normalidad.get("residuos_anova")
 
     n_muestra = resultados.get("n_muestra", 0)
 
@@ -93,12 +118,74 @@ def generar_reporte_markdown(
     tabla_anova_texto = anova.get("tabla_texto", "")
     conclusion_anova = anova.get("conclusion", "No se obtuvo un resultado interpretable del ANOVA.")
     mensaje_anova = anova.get("mensaje", "")
+    tabla_anova = anova.get("tabla")
 
     # Rutas de figuras
     ruta_hist = _ruta_a_posix(rutas_figuras.get("hist_acuerdo"))
     ruta_box_frec = _ruta_a_posix(rutas_figuras.get("box_frecuencia"))
     ruta_box_edad = _ruta_a_posix(rutas_figuras.get("box_edad"))
     ruta_barras = _ruta_a_posix(rutas_figuras.get("barras_tratamientos"))
+    ruta_corr = _ruta_a_posix(rutas_figuras.get("correlaciones"))
+
+    correlaciones_obj = resultados.get("correlaciones")
+    if isinstance(correlaciones_obj, pd.DataFrame):
+        matriz_correlaciones = correlaciones_obj
+    elif correlaciones_obj is not None:
+        matriz_correlaciones = pd.DataFrame(correlaciones_obj)
+    else:
+        matriz_correlaciones = pd.DataFrame()
+
+    descripcion_correlaciones: list[str] = []
+    pares_descripcion = [
+        ("acuerdo_ampliacion", "p2_economia", "acuerdo con la ampliación y el impacto económico"),
+        ("acuerdo_ampliacion", "p3_necesidad", "acuerdo con la ampliación y la percepción de necesidad"),
+        ("p2_economia", "p3_necesidad", "impacto económico y necesidad de la obra"),
+    ]
+    if not matriz_correlaciones.empty:
+        for col1, col2, texto in pares_descripcion:
+            if col1 in matriz_correlaciones.index and col2 in matriz_correlaciones.columns:
+                valor = matriz_correlaciones.loc[col1, col2]
+                descripcion_correlaciones.append(
+                    f"La correlación entre {texto} es {valor:.2f}, considerada {_describir_correlacion(valor)}."
+                )
+
+    porcentaje_favor = ic_prop.get("p_hat") or 0.0
+    if porcentaje_favor is None:
+        porcentaje_favor = 0.0
+
+    mensaje_prueba = (
+        "La prueba t rechaza la hipótesis nula y respalda que la media supera el umbral establecido."
+        if prueba.get("decision") == "Rechazar H0"
+        else "La prueba t no rechaza la hipótesis nula."
+    )
+
+    mensaje_interaccion = ""
+    if isinstance(tabla_anova, pd.DataFrame) and "PR(>F)" in tabla_anova.columns:
+        etiqueta_interaccion = "C(frecuencia_viaje):C(grupo_edad)"
+        if etiqueta_interaccion in tabla_anova.index:
+            p_interaccion = tabla_anova.loc[etiqueta_interaccion, "PR(>F)"]
+            if p_interaccion < 0.05:
+                mensaje_interaccion = (
+                    "La interacción significativa entre edad y frecuencia de viaje sugiere segmentar"
+                    " las comunicaciones según ambos factores."
+                )
+            else:
+                mensaje_interaccion = (
+                    "Aunque la interacción edad × frecuencia no resultó significativa,"
+                    " conviene monitorear diferencias entre segmentos."
+                )
+
+    texto_recomendaciones = (
+        "Con una media de acuerdo de {media} y una proporción estimada a favor de {prop},"
+        " la ampliación cuenta con amplia aceptación social. Se recomienda comunicar los"
+        " beneficios económicos y la necesidad de la obra resaltando que {mensaje_prueba}"
+        " {mensaje_interaccion}"
+    ).format(
+        media=_formatear_numero(acuerdo.get("media")),
+        prop=f"{porcentaje_favor:.1%}",
+        mensaje_prueba=mensaje_prueba,
+        mensaje_interaccion=mensaje_interaccion,
+    )
 
     # Conclusiones generales
     conclusiones_generales = [
@@ -223,6 +310,8 @@ def generar_reporte_markdown(
         contenido += f"![Boxplot por grupo etario]({ruta_box_edad})\n\n"
     if ruta_barras:
         contenido += f"![Medias por tratamiento]({ruta_barras})\n\n"
+    if ruta_corr:
+        contenido += f"![Matriz de correlaciones]({ruta_corr})\n\n"
 
     # Conclusiones finales
     contenido += "## 7. Conclusiones generales\n\n"
@@ -230,6 +319,50 @@ def generar_reporte_markdown(
         contenido += f"- {conclusion}\n"
 
     contenido += "\n"
+
+    contenido += "## 8. Pruebas de normalidad\n\n"
+    if normalidad_acuerdo:
+        contenido += "### 8.1. Variable de acuerdo con la ampliación\n\n"
+        contenido += (
+            "- n = {n}\n"
+            "- Estadístico Shapiro-Wilk = {estad}\n"
+            "- p-valor = {p}\n"
+            "- Interpretación: {texto}\n\n"
+        ).format(
+            n=normalidad_acuerdo.get("n", "N/A"),
+            estad=_formatear_numero(normalidad_acuerdo.get("estadistico")),
+            p=_formatear_numero(normalidad_acuerdo.get("p_valor"), 4),
+            texto=normalidad_acuerdo.get("decision_texto", ""),
+        )
+
+    if normalidad_residuos:
+        contenido += "### 8.2. Residuos del modelo ANOVA\n\n"
+        contenido += (
+            "- n = {n}\n"
+            "- Estadístico Shapiro-Wilk = {estad}\n"
+            "- p-valor = {p}\n"
+            "- Interpretación: {texto}\n\n"
+        ).format(
+            n=normalidad_residuos.get("n", "N/A"),
+            estad=_formatear_numero(normalidad_residuos.get("estadistico")),
+            p=_formatear_numero(normalidad_residuos.get("p_valor"), 4),
+            texto=normalidad_residuos.get("decision_texto", ""),
+        )
+
+    contenido += "## 9. Correlación entre variables de opinión\n\n"
+    if descripcion_correlaciones:
+        contenido += (
+            "Se observa la matriz de correlaciones en la figura correspondiente."
+            " A continuación se describen los coeficientes más relevantes:\n"
+        )
+        for descripcion in descripcion_correlaciones:
+            contenido += f"- {descripcion}\n"
+        contenido += "\n"
+    else:
+        contenido += "No se pudieron calcular correlaciones confiables con los datos disponibles.\n\n"
+
+    contenido += "## 10. Recomendaciones\n\n"
+    contenido += f"{texto_recomendaciones}\n"
 
     # Escribir archivo
     output_path.write_text(contenido, encoding="utf-8")

@@ -6,11 +6,13 @@ from pathlib import Path
 from src.cargar_datos import cargar_excel
 from src.config import DATA_PATH
 from src.descriptivos import resumen_general, resumen_por_grupo
+from src.diagnosticos import prueba_normalidad_acuerdo, prueba_normalidad_residuos
 from src.diseno_factorial import anova_2x3
 from src.graficos import (
     guardar_barras_por_tratamiento,
     guardar_boxplots_por_factores,
     guardar_histograma_acuerdo,
+    guardar_mapa_correlacion,
 )
 from src.intervalos_confianza import intervalo_confianza_media, intervalo_confianza_proporcion
 from src.limpiar_preparar import preparar_datos
@@ -92,6 +94,17 @@ def main() -> None:
     print("===== ANOVA 2x3 =====")
     resultado_anova = anova_2x3(df_preparado)
 
+    print("===== PRUEBAS DE NORMALIDAD =====")
+    resultado_normalidad: dict[str, dict[str, float | str]] = {}
+    resultado_normalidad["acuerdo"] = prueba_normalidad_acuerdo(df_preparado)
+    if resultado_anova.get("modelo") is not None:
+        resultado_normalidad["residuos_anova"] = prueba_normalidad_residuos(
+            resultado_anova.get("modelo")
+        )
+
+    columnas_opinion = ["acuerdo_ampliacion", "p2_economia", "p3_necesidad"]
+    df_correlaciones = df_preparado[columnas_opinion].corr()
+
     print("===== GRÁFICAS =====")
     rutas_figuras: dict[str, Path] = {}
     rutas_figuras["hist_acuerdo"] = guardar_histograma_acuerdo(df_preparado, FIGURAS_DIR)
@@ -100,6 +113,7 @@ def main() -> None:
     rutas_figuras["barras_tratamientos"] = guardar_barras_por_tratamiento(
         df_preparado, FIGURAS_DIR
     )
+    rutas_figuras["correlaciones"] = guardar_mapa_correlacion(df_preparado, FIGURAS_DIR)
 
     resultados = {
         "n_muestra": int(len(df_preparado)),
@@ -111,6 +125,8 @@ def main() -> None:
         },
         "prueba_hipotesis": resultado_prueba,
         "anova": resultado_anova,
+        "normalidad": resultado_normalidad,
+        "correlaciones": df_correlaciones,
     }
 
     generar_reporte_markdown(resultados, rutas_figuras, REPORTE_PATH)

@@ -74,6 +74,7 @@ def anova_2x3(df: pd.DataFrame) -> Dict[str, object]:
             "tabla": None,
             "tabla_texto": "",
             "conclusion": "No fue posible estimar el modelo por ausencia de factores clave.",
+            "modelo": None,
         }
 
     df_anova = df_anova[df_anova["grupo_edad"] != "Sin categoría"]
@@ -112,6 +113,7 @@ def anova_2x3(df: pd.DataFrame) -> Dict[str, object]:
                 "No se pudo ajustar el modelo ANOVA porque algún factor quedó representado con "
                 "un único nivel tras el filtrado de datos."
             ),
+            "modelo": None,
         }
 
     # Si hay suficientes niveles, intentamos ajustar el modelo
@@ -134,6 +136,7 @@ def anova_2x3(df: pd.DataFrame) -> Dict[str, object]:
             "tabla": tabla_anova,
             "tabla_texto": tabla_anova.to_string(),
             "conclusion": conclusion,
+            "modelo": modelo,
         }
     except Exception as e:
         print(
@@ -154,4 +157,5 @@ def anova_2x3(df: pd.DataFrame) -> Dict[str, object]:
                 "Aunque se intentó ajustar el modelo ANOVA 2×3, surgieron problemas numéricos "
                 "que impidieron obtener resultados válidos."
             ),
+            "modelo": None,
         }

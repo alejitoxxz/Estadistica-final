@@ -161,3 +161,39 @@ def guardar_barras_por_tratamiento(
 
     ruta = output_dir / "barras_tratamientos.png"
     return _guardar_figura(fig, ruta, mostrar)
+
+
+def guardar_mapa_correlacion(
+    df: pd.DataFrame, output_dir: Path, mostrar: bool = False
+) -> Path:
+    """Genera un mapa de calor de correlaciones entre variables de opinión."""
+
+    columnas = ["acuerdo_ampliacion", "p2_economia", "p3_necesidad"]
+    presentes = [col for col in columnas if col in df.columns]
+
+    if len(presentes) < 2:
+        raise ValueError(
+            "Se requieren al menos dos variables de opinión para calcular correlaciones."
+        )
+
+    df_opinion = df[presentes].dropna(how="all")
+    df_corr = df_opinion.corr()
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(
+        df_corr,
+        annot=True,
+        fmt=".2f",
+        cmap="coolwarm",
+        vmin=-1,
+        vmax=1,
+        center=0,
+        square=False,
+        linewidths=0.5,
+        cbar_kws={"shrink": 0.8},
+        ax=ax,
+    )
+    ax.set_title("Matriz de correlaciones entre variables de opinión", fontsize=14)
+
+    ruta = output_dir / "correlaciones.png"
+    return _guardar_figura(fig, ruta, mostrar)
