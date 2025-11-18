@@ -179,21 +179,43 @@ def guardar_mapa_correlacion(
     df_opinion = df[presentes].dropna(how="all")
     df_corr = df_opinion.corr()
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    etiquetas = {
+        "acuerdo_ampliacion": "Acuerdo con la ampliación",
+        "p2_economia": "Impacto económico",
+        "p3_necesidad": "Necesidad de la obra",
+    }
+    df_corr = df_corr.rename(index=etiquetas, columns=etiquetas)
+
+    mask = np.tril(np.ones_like(df_corr, dtype=bool), k=-1)
+
+    fig, ax = plt.subplots(figsize=(10, 8))
     sns.heatmap(
         df_corr,
+        mask=mask,
         annot=True,
         fmt=".2f",
         cmap="coolwarm",
         vmin=-1,
         vmax=1,
         center=0,
-        square=False,
+        square=True,
         linewidths=0.5,
-        cbar_kws={"shrink": 0.8},
+        cbar_kws={
+            "shrink": 0.8,
+            "label": "Coeficiente de correlación de Pearson",
+        },
+        annot_kws={"fontsize": 12},
         ax=ax,
     )
-    ax.set_title("Matriz de correlaciones entre variables de opinión", fontsize=14)
+    ax.set_title(
+        "Matriz de correlaciones entre variables de opinión",
+        fontsize=18,
+        pad=20,
+    )
+    ax.set_xlabel("Variables", fontsize=14)
+    ax.set_ylabel("Variables", fontsize=14)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=20, ha="right", fontsize=11)
+    ax.set_yticklabels(ax.get_yticklabels(), fontsize=11)
 
     ruta = output_dir / "correlaciones.png"
     return _guardar_figura(fig, ruta, mostrar)
